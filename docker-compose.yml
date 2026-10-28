@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Database
+  mongo:
+    image: mongo:7.0
+    container_name: apex-bank-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=bankdb
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - bank-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # 2. Node.js Express Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: apex-bank-backend
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGO_URI=mongodb://mongo:27017/bankdb
+      - JWT_SECRET=supersecret_apex_bank_jwt_key_2026_super_secure
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=smollm:135m
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - bank-network
+
+  # 3. React Frontend Client (Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: apex-bank-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - bank-network
+
+  # 4. Mongo-Express Web UI (Database visualizer)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: apex-bank-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH=false
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - bank-network
+
+  # 5. Ollama AI Engine Container (Lightweight Alpine ~70MB)
+  ollama:
+    image: alpine/ollama:latest
+    container_name: apex-bank-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - bank-network
+
+  # 6. Auto-Puller for Tiny Model (smollm:135m ~85MB)
+  ollama-puller:
+    image: curlimages/curl:latest
+    container_name: apex-bank-ollama-puller
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Ollama container to start..."
+        while ! curl -s http://ollama:11434/api/tags > /dev/null; do
+          sleep 2
+        done
+        echo "Ollama is ready! Pulling tiny model (smollm:135m ~85MB)..."
+        curl -s -X POST http://ollama:11434/api/pull -d '{"name": "smollm:135m"}'
+        echo "Ollama model ready inside container!"
+    networks:
+      - bank-network
+
+volumes:
+  mongo_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+networks:
+  bank-network:
+    driver: bridge
+
+
+
+
+
