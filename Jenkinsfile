@@ -61,6 +61,14 @@ pipeline {
             }
         }
 
+        stage("Docker Image Testing Trivy") {
+            steps {
+                echo "Scanning Docker images with Trivy..."
+                sh 'trivy image apex-bank-backend:latest'
+                sh 'trivy image apex-bank-frontend:latest'
+            }
+        }
+
         stage('Docker Image Pushing') {
             steps {
                 echo 'Pushing Docker images to Docker Hub...'
