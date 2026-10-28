@@ -10,7 +10,7 @@ export const generateAccountNumber = () => {
 // Generate a 16-digit formatted card number
 export const generateCardDetails = () => {
   const bin = '4532'; // Visa prefix
-  const middle = Math.floor(10000000000 + Math.random() * 90000000000).toString();
+  const middle = Math.floor(100000000000 + Math.random() * 900000000000).toString();
   const rawNumber = `${bin}${middle}`;
   const cardNumber = rawNumber.match(/.{1,4}/g)?.join(' ') || rawNumber;
 

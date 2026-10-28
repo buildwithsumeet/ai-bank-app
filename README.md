@@ -465,6 +465,74 @@ jobs:
       - run: docker compose build --parallel
 ```
 
+#### Jenkins Declarative Pipeline (`Jenkinsfile`):
+A ready-to-run Declarative Pipeline script is provided in [`Jenkinsfile`](./Jenkinsfile) for Jenkins CI/CD servers:
+
+```groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('Git Pull') {
+            steps {
+                git branch: 'main', url: 'https://github.com/buildwithsumeet/ai-bank-app.git'
+            }
+        }
+        stage('Backend - Install & Lint') {
+            steps {
+                dir('backend') {
+                    sh 'npm ci || npm install'
+                    sh 'npm run lint'
+                }
+            }
+        }
+        stage('Backend - Test') {
+            steps {
+                dir('backend') {
+                    sh 'npm test'
+                }
+            }
+        }
+        stage('Frontend - Install & Lint') {
+            steps {
+                dir('frontend') {
+                    sh 'npm ci || npm install'
+                    sh 'npm run lint'
+                }
+            }
+        }
+        stage('Frontend - Test & Build') {
+            steps {
+                dir('frontend') {
+                    sh 'npm test'
+                    sh 'npm run build'
+                }
+            }
+        }
+        stage('Docker - Build & Validate') {
+            steps {
+                sh 'docker compose config'
+                sh 'docker compose build'
+            }
+        }
+    }
+}
+```
+
+#### Running Lint & Tests Locally:
+```bash
+# Backend Syntax Lint & Unit Tests
+cd backend
+npm run lint    # Scans all 19 JavaScript ESM files with zero external dependencies
+npm test        # Runs unit tests (Account generator, 16-digit card, JWT tokens)
+
+# Frontend JSX Lint & Tests
+cd frontend
+npm run lint    # Scans all 15 React JSX components with esbuild
+npm test        # Validates client API contract & currency masking utilities
+npm run build   # Production Vite compilation
+```
+
 ---
 
 ### 5. Production Deployment Strategies
