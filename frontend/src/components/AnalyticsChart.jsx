@@ -3,6 +3,7 @@ import { api } from '../api/client';
 
 export default function AnalyticsChart({ refreshTrigger }) {
   const [data, setData] = useState(null);
+  const [isCached, setIsCached] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -12,6 +13,7 @@ export default function AnalyticsChart({ refreshTrigger }) {
         const res = await api.getAnalytics();
         if (res.success) {
           setData(res.data);
+          setIsCached(!!res.cached);
         }
       } catch (err) {
         console.error('Failed to load analytics:', err);
@@ -33,11 +35,26 @@ export default function AnalyticsChart({ refreshTrigger }) {
 
   return (
     <div className="glass-panel" style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '16px' }}>
-        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff' }}>Financial Pulse</h3>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          Aggregated cashflow & expense insights
-        </p>
+      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff' }}>Financial Pulse</h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            MongoDB Aggregation Pipeline & Insights
+          </p>
+        </div>
+        {isCached && (
+          <span style={{
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            padding: '3px 8px',
+            borderRadius: '12px',
+            background: 'rgba(239, 68, 68, 0.15)',
+            color: '#f87171',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+          }}>
+            ⚡ Redis Cached
+          </span>
+        )}
       </div>
 
       {/* Income vs Outflow Dual Meter */}

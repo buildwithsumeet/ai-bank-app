@@ -3,15 +3,31 @@ import {
   generateAccountNumber,
   generateCardDetails,
 } from '../utils/accountNumberGenerator.js';
+import { cacheGet, cacheSet, invalidateUserCache } from '../utils/cacheManager.js';
 
-// @desc    Get all accounts for authenticated user
+// @desc    Get all accounts for authenticated user (Cached in Redis)
 // @route   GET /api/accounts
 // @access  Private
 export const getMyAccounts = async (req, res) => {
   try {
+    const cacheKey = `user:accounts:${req.user._id}`;
+    const cachedAccounts = await cacheGet(cacheKey);
+
+    if (cachedAccounts) {
+      return res.json({
+        success: true,
+        cached: true,
+        count: cachedAccounts.length,
+        data: cachedAccounts,
+      });
+    }
+
     const accounts = await Account.find({ user: req.user._id });
+    await cacheSet(cacheKey, accounts, 600); // 10 minutes TTL
+
     res.json({
       success: true,
+      cached: false,
       count: accounts.length,
       data: accounts,
     });
@@ -75,6 +91,9 @@ export const createAccount = async (req, res) => {
       cardExpiry,
       cardCvv,
     });
+
+    // Invalidate user cache so fresh accounts list is loaded
+    await invalidateUserCache(req.user._id);
 
     res.status(201).json({
       success: true,

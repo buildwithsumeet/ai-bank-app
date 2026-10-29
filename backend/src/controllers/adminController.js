@@ -1,12 +1,24 @@
 import User from '../models/User.js';
 import Account from '../models/Account.js';
 import Transaction from '../models/Transaction.js';
+import { cacheGet, cacheSet } from '../utils/cacheManager.js';
 
-// @desc    Get overall bank system statistics
+// @desc    Get overall bank system statistics (Cached in Redis)
 // @route   GET /api/admin/metrics
 // @access  Private/Admin
 export const getSystemMetrics = async (req, res) => {
   try {
+    const cacheKey = 'admin:metrics';
+    const cachedMetrics = await cacheGet(cacheKey);
+
+    if (cachedMetrics) {
+      return res.json({
+        success: true,
+        cached: true,
+        data: cachedMetrics,
+      });
+    }
+
     const totalUsers = await User.countDocuments({ role: 'customer' });
     const totalAccounts = await Account.countDocuments();
     const activeAccounts = await Account.countDocuments({ status: 'active' });
@@ -25,16 +37,22 @@ export const getSystemMetrics = async (req, res) => {
     ]);
     const totalTransactionVolume = volumeAggregation[0]?.totalVolume || 0;
 
+    const metricsData = {
+      totalUsers,
+      totalAccounts,
+      activeAccounts,
+      totalTransactions,
+      totalBankHoldings,
+      totalTransactionVolume,
+    };
+
+    // Cache in Redis for 5 minutes (300 seconds)
+    await cacheSet(cacheKey, metricsData, 300);
+
     res.json({
       success: true,
-      data: {
-        totalUsers,
-        totalAccounts,
-        activeAccounts,
-        totalTransactions,
-        totalBankHoldings,
-        totalTransactionVolume,
-      },
+      cached: false,
+      data: metricsData,
     });
   } catch (error) {
     res.status(500).json({
@@ -44,29 +62,32 @@ export const getSystemMetrics = async (req, res) => {
   }
 };
 
-// @desc    Get all users with their accounts
+// @desc    Get all users with their accounts using MongoDB $lookup Aggregation
 // @route   GET /api/admin/users
 // @access  Private/Admin
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
-    const userIds = users.map((u) => u._id);
-    const accounts = await Account.find({ user: { $in: userIds } });
-
-    const usersWithAccounts = users.map((user) => {
-      const userAccs = accounts.filter(
-        (a) => a.user.toString() === user._id.toString()
-      );
-      return {
-        ...user.toObject(),
-        accounts: userAccs,
-        totalBalance: userAccs.reduce((sum, a) => sum + a.balance, 0),
-      };
-    });
+    const usersWithAccounts = await User.aggregate([
+      { $sort: { createdAt: -1 } },
+      { $project: { password: 0 } },
+      {
+        $lookup: {
+          from: 'accounts',
+          localField: '_id',
+          foreignField: 'user',
+          as: 'accounts',
+        },
+      },
+      {
+        $addFields: {
+          totalBalance: { $sum: '$accounts.balance' },
+        },
+      },
+    ]);
 
     res.json({
       success: true,
-      count: users.length,
+      count: usersWithAccounts.length,
       data: usersWithAccounts,
     });
   } catch (error) {

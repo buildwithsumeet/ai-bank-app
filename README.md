@@ -3,6 +3,8 @@
 [![Build Status](https://img.shields.io/badge/CI%2FCD-Passing-brightgreen?logo=github-actions)](.github/workflows/ci-cd.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-v20-339933?logo=node.js)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-v18-61DAFB?logo=react)](https://react.dev/)
+[![Redux Toolkit](https://img.shields.io/badge/Redux_Toolkit-RTK-764ABC?logo=redux)](https://redux-toolkit.js.org/)
+[![Redis](https://img.shields.io/badge/Redis-v7.0_Cache-DC382D?logo=redis)](https://redis.io/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-v7.0-47A248?logo=mongodb)](https://www.mongodb.com/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-K8s_v1.30+-326CE5?logo=kubernetes&logoColor=white)](k8s/)
@@ -10,7 +12,7 @@
 [![Ollama](https://img.shields.io/badge/Ollama-Local_AI-FF6B6B?logo=ollama)](https://ollama.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A production-grade, cloud-native Digital Banking Platform built with the **MERN** stack (MongoDB, Express.js, React 18, Node.js) featuring an on-premise **Ollama AI Banking Assistant** (< 155 MB footprint), real-time database auto-seeding with visual progress tracking, atomic balance concurrency, interactive 16-digit virtual debit cards, and an enterprise **Kubernetes (K8s) & DevOps / SRE** architecture.
+A production-grade, cloud-native Digital Banking Platform built with the **MERN** stack (MongoDB, Express.js, React 18, Node.js) featuring **Redux Toolkit (RTK)** state management, **Redis 7.0 In-Memory Caching** with automatic cache invalidation and token blacklisting, multi-stage **MongoDB Aggregation Pipelines** (`$facet`, `$group`, `$lookup`), an enterprise **Dual-Token Authentication (15-min Access + 7-day Refresh Token)** architecture with silent rotation, an on-premise **Ollama AI Banking Assistant** (< 155 MB footprint), real-time database auto-seeding with visual progress tracking, atomic balance concurrency, interactive 16-digit virtual debit cards, and an enterprise **Kubernetes (K8s) & DevOps / SRE** architecture.
 
 ---
 
@@ -22,10 +24,14 @@ A production-grade, cloud-native Digital Banking Platform built with the **MERN*
 5. [🔑 Environment Variables (.env) Full Specification](#-environment-variables-env-full-specification)
 6. [🚀 Quickstart & Docker Orchestration](#-quickstart--docker-orchestration)
 7. [☸️ Cloud-Native Kubernetes (K8s) Orchestration](#️-cloud-native-kubernetes-k8s-orchestration)
-8. [💻 Manual Local Development (Without Docker)](#-manual-local-development-without-docker)
-9. [🧪 Pre-Seeded Test Credentials](#-pre-seeded-test-credentials)
-10. [📖 Complete REST API Specification](#-complete-rest-api-specification)
-11. [🛠️ DevOps & SRE Master Guide](#️-devops--sre-master-guide-what-devops-engineers-need)
+8. [⚡ Redis In-Memory Caching & Token Blacklist Architecture](#-redis-in-memory-caching--token-blacklist-architecture)
+9. [📊 MongoDB Aggregation Pipelines (Financial Analytics)](#-mongodb-aggregation-pipelines-financial-analytics)
+10. [🔐 Dual-Token Authentication (Access + Refresh Token)](#-dual-token-authentication-access--refresh-token)
+11. [⚛️ Redux Toolkit (RTK) Centralized Frontend Store](#-redux-toolkit-rtk-centralized-frontend-store)
+12. [💻 Manual Local Development (Without Docker)](#-manual-local-development-without-docker)
+13. [🧪 Pre-Seeded Test Credentials](#-pre-seeded-test-credentials)
+14. [📖 Complete REST API Specification](#-complete-rest-api-specification)
+15. [🛠️ DevOps & SRE Master Guide](#️-devops--sre-master-guide-what-devops-engineers-need)
     - [Container Topology & Microservices](#1-container-topology--microservices)
     - [macOS Port 5000 Collision Resolution](#2-macos-port-5000-collision-resolution)
     - [Health Checks & Liveness Probes](#3-health-checks--liveness-probes)
@@ -510,6 +516,212 @@ If your Kind nodes expose port mappings to host or you are using Minikube / bare
 | **Check Resource Usage** | `kubectl top pods -n apexbank` |
 | **Scale Workload** | `kubectl scale deployment/backend-deployment --replicas=3 -n apexbank` |
 | **Delete All K8s Resources** | `kubectl delete -f k8s/ -n apexbank` |
+
+---
+
+## ⚡ Redis In-Memory Caching & Token Blacklist Architecture
+
+Apex Bank uses an enterprise-grade **Redis 7.0 In-Memory Data Store** connected via `ioredis` for sub-millisecond query performance, multi-tiered read caching, atomic session tracking, and instant JWT revocation.
+
+```
++---------------------------------------------------------------------------------------+
+|                                REDIS CACHE-ASIDE PATTERN                              |
+|                                                                                       |
+|   Client Request ---> [Express Backend] ---> Check Redis Cache (ioredis)              |
+|                                                      |                                |
+|                        +-----------------------------+-----------------------------+  |
+|                        |                                                           |  |
+|                  Cache HIT (~1ms)                                           Cache MISS|
+|                        |                                                           |  |
+|                        v                                                           v  |
+|           Return Cached JSON Payload                                 Query MongoDB Cluster|
+|                                                                                    |  |
+|                                                              Save to Redis with TTL|
+|                                                                                    |  |
+|                                                                 Return Fresh Data  |
++---------------------------------------------------------------------------------------+
+```
+
+### 🗝️ Redis Key Namespace & TTL Matrix
+
+| Cache Key Pattern | TTL (Seconds) | Data Type | Purpose & Invalidation Strategy |
+| :--- | :--- | :--- | :--- |
+| `user:profile:{userId}` | `600s` (10 min) | JSON String | Current user profile details & primary account summary. |
+| `user:accounts:{userId}` | `600s` (10 min) | JSON String | User accounts array with balances & 16-digit virtual card info. |
+| `analytics:{userId}` | `900s` (15 min) | JSON String | Aggregated financial metrics, monthly cashflows, category breakdown. |
+| `admin:metrics` | `300s` (5 min) | JSON String | Bank-wide liquidity holdings, transaction volume, active users count. |
+| `refresh:token:{token}` | `604800s` (7 days) | String (UUID) | Active refresh tokens allowed to rotate into new access tokens. |
+| `blacklist:token:{token}` | `900s` (15 min) | String (`'revoked'`) | Revoked access tokens blacklisted upon user logout. |
+
+### 🔄 Automatic Cache Invalidation on Mutations
+Whenever a balance-altering mutation takes place:
+- **Deposit (`/api/transactions/deposit`)**: Purges `user:profile:{userId}`, `user:accounts:{userId}`, `analytics:{userId}`, and `admin:metrics`.
+- **Withdrawal (`/api/transactions/withdraw`)**: Purges account and analytics caches for the withdrawing user.
+- **Transfer (`/api/transactions/transfer`)**: Atomically invalidates both the **sender's** and **recipient's** profile and analytics caches, plus system admin statistics.
+
+### 🛡️ High-Availability Graceful Fallback
+If the Redis container is paused, recovering, or temporarily unreachable, the `backend/src/config/redis.js` client automatically switches to **Database-Only Fallback Mode**. The backend logs a warning and routes queries directly to MongoDB without crashing or dropping banking requests.
+
+---
+
+## 📊 MongoDB Aggregation Pipelines (Financial Analytics)
+
+Traditional banking architectures that fetch all raw transactions into application memory and run JavaScript `.forEach()` loops suffer severe memory bloat and latency spikes when handling thousands of transactions.
+
+Apex Bank delegates all multi-dimensional calculations directly to the **MongoDB Database Engine** using optimized multi-stage aggregation pipelines:
+
+### 1. Customer Financial Pulse Pipeline (`$facet`, `$project`, `$group`)
+In `backend/src/controllers/transactionController.js`, `getTransactionAnalytics` executes a single aggregation query featuring 4 parallel computational branches:
+
+```javascript
+const aggregationResult = await Transaction.aggregate([
+  // Stage 1: Filter user transactions by account ID and status
+  {
+    $match: {
+      $or: [
+        { senderAccount: { $in: accountIds } },
+        { recipientAccount: { $in: accountIds } },
+      ],
+      status: 'COMPLETED',
+    },
+  },
+  // Stage 2: Parallel multi-faceted analytical compute
+  {
+    $facet: {
+      // Facet A: Inflow vs Outflow & Net Savings
+      summary: [
+        {
+          $project: {
+            amount: 1,
+            isIncome: { $or: [...] },
+            isExpense: { $or: [...] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalIncome: { $sum: { $cond: [{ $eq: ['$isIncome', true] }, '$amount', 0] } },
+            totalExpense: { $sum: { $cond: [{ $eq: ['$isExpense', true] }, '$amount', 0] } },
+            count: { $sum: 1 },
+          },
+        },
+      ],
+
+      // Facet B: Category Spending Breakdown
+      categoryBreakdown: [
+        { $match: { isExpense: true } },
+        { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, count: { $sum: 1 } } },
+        { $sort: { totalAmount: -1 } },
+      ],
+
+      // Facet C: Monthly Cashflow Trend (YYYY-MM)
+      monthlyTrend: [
+        {
+          $group: {
+            _id: { month: { $dateToString: { format: '%Y-%m', date: '$createdAt' } } },
+            volume: { $sum: '$amount' },
+          },
+        },
+        { $sort: { '_id.month': -1 } },
+        { $limit: 6 },
+      ],
+
+      // Facet D: High-Value Transactions Alert
+      highValueAlerts: [
+        { $match: { amount: { $gte: 1000 } } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 5 },
+      ],
+    },
+  },
+]);
+```
+
+### 2. Admin Enterprise User-Account Relational Join (`$lookup`)
+In `backend/src/controllers/adminController.js`, `getAllUsers` uses a single `$lookup` aggregation to join users with their accounts, eliminating N+1 database queries:
+
+```javascript
+const usersWithAccounts = await User.aggregate([
+  { $sort: { createdAt: -1 } },
+  { $project: { password: 0 } },
+  {
+    $lookup: {
+      from: 'accounts',
+      localField: '_id',
+      foreignField: 'user',
+      as: 'accounts',
+    },
+  },
+  {
+    $addFields: {
+      totalBalance: { $sum: '$accounts.balance' },
+    },
+  },
+]);
+```
+
+---
+
+## 🔐 Dual-Token Authentication (Access + Refresh Token)
+
+Apex Bank replaces monolithic single-token models with a hardened **Dual-Token Architecture**:
+
+```
++------------------------------------------------------------------------------------------+
+|                        DUAL-TOKEN LIFECYCLE & ROTATION FLOW                              |
+|                                                                                          |
+| 1. Login / Register:                                                                     |
+|    Client <======== Returns Access Token (15m) & Refresh Token (7d) =======> Backend     |
+|                                                                                |         |
+|                                                     Persist in Redis ----------+         |
+|                                                                                          |
+| 2. API Request with Expired Access Token:                                                |
+|    Client ---- GET /api/accounts (Bearer ExpiredToken) ---> Backend [401 Unauthorized]   |
+|                                                                                          |
+| 3. Silent Background Refresh Interceptor:                                                |
+|    Client ---- POST /api/auth/refresh { refreshToken } ---> Backend                      |
+|                                                               |                          |
+|                                    1. Validate token in Redis v                          |
+|                                    2. Revoke old refresh token                           |
+|                                    3. Issue NEW Access Token (15m) + Rotated Refresh (7d)|
+|    Client <--- HTTP 200 { new accessToken, new refreshToken } <--------------------------+
+|                                                                                          |
+| 4. Automatic Replay:                                                                     |
+|    Client ---- GET /api/accounts (Bearer NewAccessToken) -> HTTP 200 Success             |
+|                                                                                          |
+| 5. Logout & Revocation:                                                                  |
+|    Client ---- POST /api/auth/logout ---------------------> Redis Blacklist              |
+|                                                             (Blacklist token for 15m)    |
++------------------------------------------------------------------------------------------+
+```
+
+### Key Security Benefits:
+1. **Short Attack Window**: Access tokens expire in **15 minutes**. If intercepted, the token expires quickly.
+2. **Refresh Token Rotation**: Every time a refresh token is used, it is revoked in Redis and replaced with a newly generated one. If an attacker replays an old refresh token, it is rejected immediately.
+3. **Instant Blacklisting**: When a user clicks **Logout**, the backend writes the access token into the Redis blacklist (`blacklist:token:<token>`) with a TTL matching its expiration. Any subsequent requests using that token are rejected with HTTP 401.
+
+---
+
+## ⚛️ Redux Toolkit (RTK) Centralized Frontend Store
+
+The React 18 client is backed by a modular, predictable **Redux Toolkit** store located under [`frontend/src/store/`](frontend/src/store/):
+
+```
+frontend/src/store/
+ ├── index.js                  # Root Redux store configuration
+ └── slices/
+      ├── authSlice.js         # User identity, tokens (access + refresh), auth state
+      ├── accountSlice.js      # Active bank account, accounts list, balance tracking
+      ├── transactionSlice.js  # Ledger history, analytics data, new transaction feeds
+      └── uiSlice.js           # Modal visibility (Transfer, Deposit, AI Assistant), tabs
+```
+
+### ⚡ Client-Side Silent Refresh Interceptor
+In [`frontend/src/api/client.js`](frontend/src/api/client.js), the `fetchWithAuth()` wrapper transparently captures `401 Unauthorized` responses:
+1. Automatically calls `POST /api/auth/refresh`.
+2. Updates `localStorage` and dispatches `updateAccessToken()` to Redux.
+3. Automatically retries and resolves the original failed API call without user intervention.
+4. Manages a concurrent request queue so multiple simultaneous 401s trigger only **one** token refresh.
 
 ---
 

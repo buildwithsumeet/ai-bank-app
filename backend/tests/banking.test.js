@@ -50,19 +50,47 @@ describe('Apex Banking Core Utility Tests', () => {
   });
 });
 
-describe('Banking System Constants & Safety Checks', () => {
-  test('Supported account types should be strictly bounded', () => {
-    const validAccountTypes = ['checking', 'savings', 'investment'];
-    assert.equal(validAccountTypes.length, 3);
-    assert.ok(validAccountTypes.includes('checking'));
-    assert.ok(validAccountTypes.includes('savings'));
-    assert.ok(validAccountTypes.includes('investment'));
+describe('Dual-Token JWT & Security Tests', () => {
+  test('generateAccessToken should issue a 15-minute access token', async () => {
+    const { generateAccessToken } = await import('../src/utils/tokenManager.js');
+    const mockUser = { _id: '507f1f77bcf86cd799439011', role: 'customer' };
+    const token = generateAccessToken(mockUser);
+
+    assert.ok(token);
+    assert.equal(typeof token, 'string');
+
+    const decoded = jwt.decode(token);
+    assert.equal(decoded.id, '507f1f77bcf86cd799439011');
+    assert.equal(decoded.role, 'customer');
+    assert.equal(decoded.type, 'access');
+    assert.ok(decoded.exp > decoded.iat);
   });
 
-  test('Transaction categories should cover essential cashflow needs', () => {
-    const validCategories = ['transfer', 'shopping', 'utilities', 'salary', 'investment', 'cash', 'other'];
-    assert.ok(validCategories.includes('transfer'));
-    assert.ok(validCategories.includes('salary'));
-    assert.ok(validCategories.includes('utilities'));
+  test('generateRefreshToken and verifyRefreshToken should handle rotation', async () => {
+    const { generateRefreshToken, verifyRefreshToken } = await import('../src/utils/tokenManager.js');
+    const mockUser = { _id: '507f1f77bcf86cd799439022', role: 'customer' };
+    const refreshToken = await generateRefreshToken(mockUser);
+
+    assert.ok(refreshToken);
+    const decoded = verifyRefreshToken(refreshToken);
+    assert.ok(decoded);
+    assert.equal(decoded.id, '507f1f77bcf86cd799439022');
+    assert.equal(decoded.type, 'refresh');
+    assert.ok(decoded.jti, 'Refresh token should include unique jti UUID');
+  });
+
+  test('CacheManager functions gracefully handle offline fallback without throwing', async () => {
+    const { cacheGet, cacheSet, cacheDel, isTokenBlacklisted } = await import('../src/utils/cacheManager.js');
+
+    // In offline mode (when redis server is not running during local unit test), functions must safely return fallback values
+    const cached = await cacheGet('test:key');
+    assert.equal(cached, null);
+
+    const isBlacklisted = await isTokenBlacklisted('some-fake-token');
+    assert.equal(isBlacklisted, false);
+
+    const deleted = await cacheDel('test:key');
+    assert.equal(deleted, false);
   });
 });
+

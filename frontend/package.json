@@ -17,8 +17,10 @@
     "test:docker": "playwright test e2e/docker.spec.js"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.13.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-redux": "^9.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

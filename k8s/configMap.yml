@@ -23,4 +23,5 @@ data:
   
   
   ME_CONFIG_BASICAUTH: "false"
-  
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"

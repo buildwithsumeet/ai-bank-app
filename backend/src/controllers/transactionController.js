@@ -1,6 +1,12 @@
 import Account from '../models/Account.js';
 import Transaction from '../models/Transaction.js';
 import { generateReferenceId } from '../utils/accountNumberGenerator.js';
+import {
+  cacheGet,
+  cacheSet,
+  invalidateUserCache,
+  invalidateAdminCache,
+} from '../utils/cacheManager.js';
 
 // @desc    Deposit money into an account
 // @route   POST /api/transactions/deposit
@@ -52,6 +58,10 @@ export const depositMoney = async (req, res) => {
       status: 'COMPLETED',
       balanceAfter: updatedAccount.balance,
     });
+
+    // Invalidate Redis caches
+    await invalidateUserCache(req.user._id);
+    await invalidateAdminCache();
 
     res.status(200).json({
       success: true,
@@ -124,6 +134,10 @@ export const withdrawMoney = async (req, res) => {
       status: 'COMPLETED',
       balanceAfter: updatedAccount.balance,
     });
+
+    // Invalidate Redis caches
+    await invalidateUserCache(req.user._id);
+    await invalidateAdminCache();
 
     res.status(200).json({
       success: true,
@@ -262,6 +276,13 @@ export const transferMoney = async (req, res) => {
       balanceAfter: updatedSender.balance,
     });
 
+    // Invalidate Redis caches for sender, recipient, and admin
+    await invalidateUserCache(req.user._id);
+    if (recipientAccount.user?._id) {
+      await invalidateUserCache(recipientAccount.user._id);
+    }
+    await invalidateAdminCache();
+
     res.status(200).json({
       success: true,
       message: `Successfully transferred $${numAmount.toFixed(2)} to ${recipientAccount.user.name}`,
@@ -350,54 +371,170 @@ export const getTransactionHistory = async (req, res) => {
   }
 };
 
-// @desc    Get aggregated analytics (income, expenses, spending categories)
+// @desc    Get aggregated analytics (income, expenses, spending categories, trends) via MongoDB Aggregation Pipeline
 // @route   GET /api/transactions/analytics
 // @access  Private
 export const getTransactionAnalytics = async (req, res) => {
   try {
+    const cacheKey = `analytics:${req.user._id}`;
+
+    // 1. Check Redis cache first
+    const cachedAnalytics = await cacheGet(cacheKey);
+    if (cachedAnalytics) {
+      return res.json({
+        success: true,
+        cached: true,
+        data: cachedAnalytics,
+      });
+    }
+
     const userAccounts = await Account.find({ user: req.user._id }).select('_id');
     const accountIds = userAccounts.map((acc) => acc._id);
 
-    const transactions = await Transaction.find({
-      $or: [
-        { senderAccount: { $in: accountIds } },
-        { recipientAccount: { $in: accountIds } },
-      ],
-      status: 'COMPLETED',
-    }).sort({ createdAt: -1 });
+    if (accountIds.length === 0) {
+      const emptyResult = {
+        totalIncome: 0,
+        totalExpense: 0,
+        netSavings: 0,
+        categoryBreakdown: {},
+        categories: [],
+        monthlyTrend: [],
+        highValueAlerts: [],
+        recentCount: 0,
+      };
+      return res.json({ success: true, cached: false, data: emptyResult });
+    }
 
-    let totalIncome = 0;
-    let totalExpense = 0;
-    const categoryBreakdown = {};
+    // 2. Execute MongoDB Multi-Stage Aggregation Pipeline with $facet
+    const aggregationResult = await Transaction.aggregate([
+      {
+        $match: {
+          $or: [
+            { senderAccount: { $in: accountIds } },
+            { recipientAccount: { $in: accountIds } },
+          ],
+          status: 'COMPLETED',
+        },
+      },
+      {
+        $facet: {
+          // Facet A: Financial summary (Income, Expense, Net Savings, Counts)
+          summary: [
+            {
+              $project: {
+                amount: 1,
+                type: 1,
+                isIncome: {
+                  $or: [
+                    { $and: [{ $eq: ['$type', 'DEPOSIT'] }, { $in: ['$recipientAccount', accountIds] }] },
+                    { $and: [{ $eq: ['$type', 'TRANSFER'] }, { $in: ['$recipientAccount', accountIds] }, { $not: { $in: ['$senderAccount', accountIds] } }] },
+                  ],
+                },
+                isExpense: {
+                  $or: [
+                    { $and: [{ $eq: ['$type', 'WITHDRAWAL'] }, { $in: ['$senderAccount', accountIds] }] },
+                    { $and: [{ $eq: ['$type', 'TRANSFER'] }, { $in: ['$senderAccount', accountIds] }, { $not: { $in: ['$recipientAccount', accountIds] } }] },
+                  ],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalIncome: {
+                  $sum: { $cond: [{ $eq: ['$isIncome', true] }, '$amount', 0] },
+                },
+                totalExpense: {
+                  $sum: { $cond: [{ $eq: ['$isExpense', true] }, '$amount', 0] },
+                },
+                count: { $sum: 1 },
+              },
+            },
+          ],
 
-    transactions.forEach((tx) => {
-      const isSender = accountIds.some((id) => id.toString() === tx.senderAccount?.toString());
-      const isRecipient = accountIds.some((id) => id.toString() === tx.recipientAccount?.toString());
+          // Facet B: Category Spending Breakdown
+          categoryBreakdown: [
+            {
+              $match: {
+                $or: [
+                  { type: 'WITHDRAWAL', senderAccount: { $in: accountIds } },
+                  { type: 'TRANSFER', senderAccount: { $in: accountIds }, recipientAccount: { $nin: accountIds } },
+                ],
+              },
+            },
+            {
+              $group: {
+                _id: '$category',
+                totalAmount: { $sum: '$amount' },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { totalAmount: -1 } },
+          ],
 
-      if (tx.type === 'DEPOSIT' && isRecipient) {
-        totalIncome += tx.amount;
-      } else if (tx.type === 'WITHDRAWAL' && isSender) {
-        totalExpense += tx.amount;
-        categoryBreakdown[tx.category] = (categoryBreakdown[tx.category] || 0) + tx.amount;
-      } else if (tx.type === 'TRANSFER') {
-        if (isSender && !isRecipient) {
-          totalExpense += tx.amount;
-          categoryBreakdown[tx.category] = (categoryBreakdown[tx.category] || 0) + tx.amount;
-        } else if (isRecipient && !isSender) {
-          totalIncome += tx.amount;
-        }
-      }
+          // Facet C: Monthly Cashflow Trend
+          monthlyTrend: [
+            {
+              $group: {
+                _id: {
+                  month: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+                },
+                volume: { $sum: '$amount' },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { '_id.month': -1 } },
+            { $limit: 6 },
+          ],
+
+          // Facet D: High-Value Alert Transactions
+          highValueAlerts: [
+            { $match: { amount: { $gte: 1000 } } },
+            { $sort: { createdAt: -1 } },
+            { $limit: 5 },
+            {
+              $project: {
+                referenceId: 1,
+                type: 1,
+                amount: 1,
+                category: 1,
+                description: 1,
+                createdAt: 1,
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    const facet = aggregationResult[0] || {};
+    const summaryData = facet.summary?.[0] || { totalIncome: 0, totalExpense: 0, count: 0 };
+    const categoriesArray = facet.categoryBreakdown || [];
+
+    // Map categories to object for backward compatibility with frontend charts
+    const categoryBreakdownObj = {};
+    categoriesArray.forEach((cat) => {
+      categoryBreakdownObj[cat._id || 'Other'] = cat.totalAmount;
     });
+
+    const analyticsData = {
+      totalIncome: summaryData.totalIncome || 0,
+      totalExpense: summaryData.totalExpense || 0,
+      netSavings: (summaryData.totalIncome || 0) - (summaryData.totalExpense || 0),
+      categoryBreakdown: categoryBreakdownObj,
+      categories: categoriesArray,
+      monthlyTrend: facet.monthlyTrend || [],
+      highValueAlerts: facet.highValueAlerts || [],
+      recentCount: summaryData.count || 0,
+    };
+
+    // 3. Cache in Redis for 15 minutes (900 seconds)
+    await cacheSet(cacheKey, analyticsData, 900);
 
     res.json({
       success: true,
-      data: {
-        totalIncome,
-        totalExpense,
-        netSavings: totalIncome - totalExpense,
-        categoryBreakdown,
-        recentCount: transactions.length,
-      },
+      cached: false,
+      data: analyticsData,
     });
   } catch (error) {
     res.status(500).json({
@@ -406,3 +543,4 @@ export const getTransactionAnalytics = async (req, res) => {
     });
   }
 };
+

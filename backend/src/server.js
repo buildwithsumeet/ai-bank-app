@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
+import { connectRedis, getRedisStatus } from './config/redis.js';
 
 // Route imports
 import authRoutes from './routes/authRoutes.js';
@@ -17,8 +18,9 @@ import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 // Load environment variables
 dotenv.config();
 
-// Connect to MongoDB
+// Connect to MongoDB & Redis In-Memory Cache
 connectDB();
+connectRedis();
 
 const app = express();
 
@@ -62,6 +64,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'Apex Modern Banking REST API',
     uptime: process.uptime(),
+    redis: getRedisStatus() ? 'connected' : 'fallback-mode',
   });
 });
 

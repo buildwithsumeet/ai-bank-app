@@ -8,13 +8,19 @@ import {
   generateReferenceId,
 } from '../utils/accountNumberGenerator.js';
 import { seedDatabase } from '../utils/seedData.js';
-
-// Helper to generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'supersecret_bank_jwt_key_2026', {
-    expiresIn: '30d',
-  });
-};
+import {
+  generateTokenPair,
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} from '../utils/tokenManager.js';
+import {
+  cacheGet,
+  cacheSet,
+  blacklistToken,
+  revokeRefreshToken,
+  verifyStoredRefreshToken,
+} from '../utils/cacheManager.js';
 
 // @desc    Register a new customer and automatically provision primary checking account
 // @route   POST /api/auth/register
@@ -77,6 +83,9 @@ export const registerUser = async (req, res) => {
       });
     }
 
+    // Generate Dual-Token Pair (Access Token + Refresh Token)
+    const tokens = await generateTokenPair(user);
+
     res.status(201).json({
       success: true,
       message: 'Account created successfully',
@@ -85,7 +94,9 @@ export const registerUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token: generateToken(user._id),
+        token: tokens.token,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
         account: {
           id: account._id,
           accountNumber: account.accountNumber,
@@ -105,7 +116,7 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// @desc    Authenticate user & get token
+// @desc    Authenticate user & get token pair (Access + Refresh Token)
 // @route   POST /api/auth/login
 // @access  Public
 export const loginUser = async (req, res) => {
@@ -138,6 +149,9 @@ export const loginUser = async (req, res) => {
     // Find user's accounts
     const accounts = await Account.find({ user: user._id });
 
+    // Generate Dual-Token Pair
+    const tokens = await generateTokenPair(user);
+
     res.json({
       success: true,
       message: 'Logged in successfully',
@@ -146,7 +160,9 @@ export const loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token: generateToken(user._id),
+        token: tokens.token,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
         accounts,
       },
     });
@@ -158,20 +174,131 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// @desc    Get current user profile & accounts
+// @desc    Refresh Access Token using Refresh Token
+// @route   POST /api/auth/refresh
+// @access  Public
+export const refreshTokenHandler = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token is required in request body',
+      });
+    }
+
+    // 1. Verify token signature
+    const decoded = verifyRefreshToken(refreshToken);
+    if (!decoded) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token. Please log in again.',
+      });
+    }
+
+    // 2. Validate token presence in Redis (if Redis active)
+    const storedUserId = await verifyStoredRefreshToken(refreshToken);
+    if (storedUserId && storedUserId !== decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token mismatch or revoked.',
+      });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user || !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'User no longer active or exists',
+      });
+    }
+
+    // 3. Rotate tokens: revoke old refresh token and issue new pair
+    await revokeRefreshToken(refreshToken);
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = await generateRefreshToken(user);
+
+    res.json({
+      success: true,
+      message: 'Access token refreshed successfully',
+      data: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        token: newAccessToken,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Token refresh failed',
+    });
+  }
+};
+
+// @desc    Logout user & revoke tokens in Redis blacklist
+// @route   POST /api/auth/logout
+// @access  Private
+export const logoutUser = async (req, res) => {
+  try {
+    const token = req.token;
+    const { refreshToken } = req.body;
+
+    // Blacklist access token in Redis (15 mins TTL)
+    if (token) {
+      await blacklistToken(token, 15 * 60);
+    }
+
+    // Revoke refresh token in Redis
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
+    }
+
+    res.json({
+      success: true,
+      message: 'Successfully logged out and session revoked',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Logout failed',
+    });
+  }
+};
+
+// @desc    Get current user profile & accounts with Redis In-Memory Caching
 // @route   GET /api/auth/profile
 // @access  Private
 export const getUserProfile = async (req, res) => {
   try {
+    const cacheKey = `user:profile:${req.user._id}`;
+
+    // 1. Check Redis cache first
+    const cachedProfile = await cacheGet(cacheKey);
+    if (cachedProfile) {
+      return res.json({
+        success: true,
+        cached: true,
+        data: cachedProfile,
+      });
+    }
+
+    // 2. Cache miss: fetch from MongoDB
     const user = await User.findById(req.user._id);
     const accounts = await Account.find({ user: user._id });
 
+    const profileData = {
+      user,
+      accounts,
+    };
+
+    // 3. Save to Redis with 10-minute TTL (600 seconds)
+    await cacheSet(cacheKey, profileData, 600);
+
     res.json({
       success: true,
-      data: {
-        user,
-        accounts,
-      },
+      cached: false,
+      data: profileData,
     });
   } catch (error) {
     res.status(500).json({
@@ -204,3 +331,4 @@ export const triggerDatabaseSeed = async (req, res) => {
     });
   }
 };
+
