@@ -21,6 +21,20 @@ spec:
               volumeMounts:
               - mountPath: /root/.ollama
                 name: ollama-storage
+              livenessProbe:
+                httpGet:
+                  path: /api/tags
+                  port: 11434
+                initialDelaySeconds: 30
+                periodSeconds: 25
+                timeoutSeconds: 5
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1.5Gi"
             volumes:
             - name: ollama-storage
               persistentVolumeClaim:

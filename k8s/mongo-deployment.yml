@@ -26,6 +26,19 @@ spec:
               volumeMounts:
               - mountPath: /data/db
                 name: mongo-storage
+              livenessProbe:
+                tcpSocket:
+                  port: 27017
+                initialDelaySeconds: 20
+                periodSeconds: 20
+                timeoutSeconds: 5
+              resources:
+                requests:
+                  cpu: "150m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
             volumes:
             - name: mongo-storage
               persistentVolumeClaim:

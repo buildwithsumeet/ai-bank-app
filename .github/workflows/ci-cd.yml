@@ -1,0 +1,118 @@
+name: Apex Bank DevSecOps CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-ci:
+    name: ⚙️ Backend Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package.json
+
+      - name: 📦 Install Backend Dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: 🔍 Run Backend Syntax & ESM Lint
+        run: |
+          cd backend
+          npm run lint
+
+      - name: 🧪 Run Backend Unit Tests
+        run: |
+          cd backend
+          npm test
+
+  frontend-ci:
+    name: 🎨 Frontend Lint, Test & Vite Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: 📦 Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: 🔍 Run Frontend JSX Lint
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: 🧪 Run Frontend Unit Tests
+        run: |
+          cd frontend
+          npm test
+
+      - name: 🏗️ Compile Production SPA Bundle
+        run: |
+          cd frontend
+          npm run build
+
+  docker-and-security:
+    name: 🐳 Docker Build & Trivy Security Scan
+    needs: [backend-ci, frontend-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🏗️ Build Backend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: buildwithsumeet/apex-bank-backend:latest
+
+      - name: 🏗️ Build Frontend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          load: true
+          tags: buildwithsumeet/apex-bank-frontend:latest
+
+      - name: 🛡️ Run Trivy Vulnerability Scanner (Backend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'buildwithsumeet/apex-bank-backend:latest'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: 🛡️ Run Trivy Vulnerability Scanner (Frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'buildwithsumeet/apex-bank-frontend:latest'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
