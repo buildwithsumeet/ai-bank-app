@@ -144,13 +144,23 @@ The application is fully configurable via environment variables.
 
 | Variable Name | Default / Local Dev Value | Docker Compose Value | Production Value | Description & DevOps Guidance |
 | :--- | :--- | :--- | :--- | :--- |
-| `NODE_ENV` | `development` | `production` | `production` | Node runtime mode. When `production`, Morgan dev logs are disabled and stack traces are suppressed from API responses. |
-| `PORT` | `5000` | `5000` | `5000` | Internal port where Express API server listens. (Mapped to `5001` on host in Docker to prevent macOS AirPlay port 5000 conflict). |
-| `MONGO_URI` | `mongodb://localhost:27017/bankdb` | `mongodb://mongo:27017/bankdb` | `mongodb+srv://<user>:<pwd>@cluster.mongodb.net/bankdb?retryWrites=true&w=majority` | Connection URI for MongoDB. In Docker, uses the container hostname `mongo`. In production, supply a secured MongoDB Atlas or replica set URI. |
-| `JWT_SECRET` | `A86niIMTaa5VO3aA6xAWiKGWZJE1bTihzkeYD7sWXym` | `supersecret_apex_bank_jwt_key_2026_super_secure` | Cryptographically random string (min 64 chars) | Secret cryptographic key used to sign and verify JSON Web Tokens. Must be protected and injected via secrets manager in production. |
+| `NODE_ENV` | `development` | `production` | `production` | Node runtime mode. When `production`, Morgan dev logs are disabled and stack traces are suppressed. |
+| `PORT` | `5000` | `5000` | `5000` | Internal port where Express API server listens inside the container. |
+| `BACKEND_PORT` | `5001` | `5001` | `5001` | Host port mapped to backend API (`5001:5000`) to prevent macOS AirPlay port 5000 conflict. |
+| `MONGO_USERNAME` | `admin` | `admin` | Custom Vault Secret | Root username for MongoDB authentication. |
+| `MONGO_PASSWORD` | `adminpassword123` | `adminpassword123` | Strong Random Password | Root password for MongoDB authentication. |
+| `MONGO_INITDB_DATABASE` | `bankdb` | `bankdb` | `bankdb` | Default database name initialized on container startup. |
+| `MONGO_PORT` | `27017` | `27017` | `27017` | Port for MongoDB service. |
+| `MONGO_URI` | `mongodb://admin:adminpassword123@localhost:27017/bankdb?authSource=admin` | `mongodb://admin:adminpassword123@mongo:27017/bankdb?authSource=admin` | `mongodb+srv://<user>:<pwd>@cluster.mongodb.net/bankdb?retryWrites=true&w=majority` | Connection URI for MongoDB with authentication credentials. |
+| `JWT_SECRET` | Cryptographically random string | `supersecret_apex_bank_jwt_key_2026_super_secure` | Cryptographically random string (min 64 chars) | Cryptographic key used to sign and verify JSON Web Tokens. Must be protected and injected via secrets manager in production. |
 | `OLLAMA_HOST` | `http://localhost:11434` | `http://ollama:11434` | `http://ollama:11434` (or private VPC endpoint) | Host address of Ollama inference engine. In Docker, points to internal service `ollama`. |
 | `OLLAMA_MODEL` | `qwen2.5:0.5b` | `smollm:135m` | `smollm:135m` or `qwen2.5:0.5b` | LLM model name. `smollm:135m` is recommended for minimal memory (< 155 MB), `qwen2.5:0.5b` for deeper conversational answers. |
+| `OLLAMA_PORT` | `11434` | `11434` | `11434` | Host port for Ollama AI engine container. |
+| `FRONTEND_PORT` | `3000` | `3000` | `80` / `443` | Host port for Frontend Web UI. |
 | `VITE_API_URL` | `http://localhost:5000` | *(handled via Nginx reverse proxy)* | `https://api.yourbank.com` | Base API target URL for frontend Vite development server proxy. |
+| `MONGO_EXPRESS_PORT` | `8081` | `8081` | *(disabled or secured)* | Host port for Mongo-Express web database visualizer. |
+| `ME_CONFIG_MONGODB_ADMINUSERNAME` | `admin` | `admin` | Custom Admin User | Admin username used by Mongo-Express to connect to MongoDB. |
+| `ME_CONFIG_MONGODB_ADMINPASSWORD` | `adminpassword123` | `adminpassword123` | Custom Admin Password | Admin password used by Mongo-Express to connect to MongoDB. |
 
 ---
 
@@ -159,7 +169,7 @@ The application is fully configurable via environment variables.
 #### Backend Configuration (`backend/.env`):
 ```dotenv
 # ==============================================================================
-# APEX BANK BACKEND ENVIRONMENT CONFIGURATION
+# APEX BANK BACKEND ENVIRONMENT CONFIGURATION (backend/.env)
 # ==============================================================================
 
 # Application Environment Mode
@@ -168,8 +178,10 @@ NODE_ENV=development
 # Internal Application Port
 PORT=5000
 
-# MongoDB Database Connection String
-MONGO_URI=mongodb://localhost:27017/bankdb
+# MongoDB Credentials & Connection String
+MONGO_USERNAME=admin
+MONGO_PASSWORD=adminpassword123
+MONGO_URI=mongodb://admin:adminpassword123@localhost:27017/bankdb?authSource=admin
 
 # JWT Cryptographic Signing Secret
 JWT_SECRET=A86niIMTaa5VO3aA6xAWiKGWZJE1bTihzkeYD7sWXym
@@ -181,7 +193,7 @@ OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:0.5b
 ```
 
-#### Frontend Configuration (`frontend/.env`):
+#### Frontend Configuration (`frontend/.env.example`):
 ```dotenv
 # ==============================================================================
 # APEX BANK FRONTEND ENVIRONMENT CONFIGURATION (Vite Dev Server)
@@ -191,19 +203,41 @@ OLLAMA_MODEL=qwen2.5:0.5b
 VITE_API_URL=http://localhost:5000
 ```
 
-#### Root Docker Configuration (`.env.example`):
+#### Root Docker Configuration (`.env` / `.env.example`):
 ```dotenv
 # ==============================================================================
-# DOCKER COMPOSE ORCHESTRATION ENVIRONMENT DEFAULTS
+# DOCKER COMPOSE ORCHESTRATION ENVIRONMENT DEFAULTS (.env / .env.example)
 # ==============================================================================
 
+# 1. Database Configuration (MongoDB)
+MONGO_USERNAME=admin
+MONGO_PASSWORD=adminpassword123
+MONGO_INITDB_DATABASE=bankdb
+MONGO_PORT=27017
+
+# 2. Backend API Configuration
 NODE_ENV=production
 PORT=5000
-MONGO_URI=mongodb://mongo:27017/bankdb
-JWT_SECRET=A86niIMTaa5VO3aA6xAWiKGWZJE1bTihzkeYD7sWXym
+BACKEND_PORT=5001
+MONGO_URI=mongodb://admin:adminpassword123@mongo:27017/bankdb?authSource=admin
+JWT_SECRET=supersecret_apex_bank_jwt_key_2026_super_secure
+
+# 3. AI / Ollama Configuration
 OLLAMA_HOST=http://ollama:11434
 OLLAMA_MODEL=smollm:135m
+OLLAMA_PORT=11434
+
+# 4. Frontend Configuration
+FRONTEND_PORT=3000
 VITE_API_URL=http://localhost:5000
+
+# 5. Mongo-Express Database Viewer Configuration
+MONGO_EXPRESS_PORT=8081
+ME_CONFIG_MONGODB_SERVER=mongo
+ME_CONFIG_MONGODB_PORT=27017
+ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+ME_CONFIG_MONGODB_ADMINPASSWORD=adminpassword123
+ME_CONFIG_BASICAUTH=false
 ```
 
 > [!WARNING]
@@ -519,18 +553,51 @@ pipeline {
 }
 ```
 
-#### Running Lint & Tests Locally:
+#### Running Lint & Unit Tests Locally:
 ```bash
 # Backend Syntax Lint & Unit Tests
 cd backend
 npm run lint    # Scans all 19 JavaScript ESM files with zero external dependencies
 npm test        # Runs unit tests (Account generator, 16-digit card, JWT tokens)
 
-# Frontend JSX Lint & Tests
+# Frontend JSX Lint & Unit Tests
 cd frontend
 npm run lint    # Scans all 15 React JSX components with esbuild
 npm test        # Validates client API contract & currency masking utilities
 npm run build   # Production Vite compilation
+```
+
+---
+
+### 🧪 Playwright End-to-End (E2E) & Multi-Tier Testing Suites
+
+The repository includes a unified, automated testing architecture powered by **Microsoft Playwright**. It tests all three system layers: **Frontend User Interface**, **Backend REST APIs**, and **Docker Container Infrastructure** with an interactive visual UI dashboard.
+
+```
+frontend/e2e/
+ ├── 🎨 frontend.spec.js   # 8 E2E UI Tests (Login, Demo Fill, Register, Cards, Modals, AI Chatbot, Admin)
+ ├── ⚙️ backend.spec.js    # 6 REST API Tests (Liveness probe, JWT auth guards, Login API, Helmet security)
+ └── 🐳 docker.spec.js     # 5 Container Health Tests (Nginx:3000, Backend:5001, MongoExpress:8081, Ollama:11434)
+```
+
+#### 🖥️ Interactive Visual Test Dashboard & Execution Commands:
+
+```bash
+cd frontend
+
+# 1. 🌟 Launch Playwright Interactive GUI Dashboard (Live DOM, Time-Travel, Runner UI)
+npm run test:ui
+
+# 2. 📊 View Interactive Web HTML Test Report
+npm run test:report
+
+# 3. 🚀 Run All Test Suites Headless (19 Multi-Tier Test Cases)
+npm run test:e2e
+
+# 4. 🎯 Run Individual Test Suites
+npm run test:frontend   # Runs Frontend UI journey test cases
+npm run test:backend    # Runs Backend API & Security test cases
+npm run test:docker     # Runs Docker Containers & Port health check cases
 ```
 
 ---
@@ -610,6 +677,47 @@ spec:
           limits:
             cpu: "1000m"
             memory: "512Mi"
+```
+
+#### 📁 Kubernetes Manifest Inventory (`k8s/`):
+| Manifest File | Kind / API Version | Scope | Purpose |
+| :--- | :--- | :--- | :--- |
+| [`k8s/kind-config.yml`](k8s/kind-config.yml) | `Cluster` (`kind.x-k8s.io/v1alpha4`) | Cluster | 4-Node local Kind cluster setup (1 control-plane + 3 workers). |
+| [`k8s/configMap.yml`](k8s/configMap.yml) | `ConfigMap` (`v1`) | `apexbank` | Application environment configuration & cluster service URIs. |
+| [`k8s/secret.yaml`](k8s/secret.yaml) | `Secret` (`v1`) | `apexbank` | Base64-encoded credentials (JWT secrets, Mongo root auth). |
+| [`k8s/persistentVolume.yml`](k8s/persistentVolume.yml) | `PersistentVolume` (`v1`) | Cluster | 5Gi HostPath storage volumes for MongoDB and Ollama AI. |
+| [`k8s/persistentVolumeClaim.yml`](k8s/persistentVolumeClaim.yml) | `PersistentVolumeClaim` (`v1`) | `apexbank` | Storage claims bound to `mongo-pv` and `ollama-pvc`. |
+| [`k8s/mongo-deployment.yml`](k8s/mongo-deployment.yml) | `Deployment` (`apps/v1`) | `apexbank` | MongoDB database container deployment with PVC mount. |
+| [`k8s/mongo-service.yml`](k8s/mongo-service.yml) | `Service` (`v1`) | `apexbank` | ClusterIP internal DNS endpoint for MongoDB (`mongo:27017`). |
+| [`k8s/ollama-deployment.yml`](k8s/ollama-deployment.yml) | `Deployment` (`apps/v1`) | `apexbank` | Ollama AI local engine with persistent volume mount. |
+| [`k8s/ollama-service.yml`](k8s/ollama-service.yml) | `Service` (`v1`) | `apexbank` | ClusterIP internal endpoint for Ollama AI (`ollama:11434`). |
+| [`k8s/backend-deployment.yml`](k8s/backend-deployment.yml) | `Deployment` (`apps/v1`) | `apexbank` | Node.js Express Backend API pods with Secret and ConfigMap bindings. |
+| [`k8s/backend-service.yml`](k8s/backend-service.yml) | `Service` (`v1`) | `apexbank` | NodePort service exposing backend (`backend:5000`, NodePort: 32000). |
+| [`k8s/frontend-deployment.yml`](k8s/frontend-deployment.yml) | `Deployment` (`apps/v1`) | `apexbank` | React 18 SPA Nginx pods serving on port 80. |
+| [`k8s/frontend-service.yml`](k8s/frontend-service.yml) | `Service` (`v1`) | `apexbank` | NodePort service exposing Web UI on port 80 (NodePort: 30000). |
+
+#### 🚀 Deploying to Kubernetes:
+```bash
+# 1. Create Namespace
+kubectl create namespace apexbank
+
+# 2. Deploy Storage, Configs, and Secrets
+kubectl apply -f k8s/persistentVolume.yml
+kubectl apply -f k8s/persistentVolumeClaim.yml
+kubectl apply -f k8s/configMap.yml
+kubectl apply -f k8s/secret.yaml
+
+# 3. Deploy Databases & AI Services
+kubectl apply -f k8s/mongo-service.yml
+kubectl apply -f k8s/mongo-deployment.yml
+kubectl apply -f k8s/ollama-service.yml
+kubectl apply -f k8s/ollama-deployment.yml
+
+# 4. Deploy Backend & Frontend Applications
+kubectl apply -f k8s/backend-service.yml
+kubectl apply -f k8s/backend-deployment.yml
+kubectl apply -f k8s/frontend-service.yml
+kubectl apply -f k8s/frontend-deployment.yml
 ```
 
 ---

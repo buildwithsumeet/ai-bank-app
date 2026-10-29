@@ -1,0 +1,27 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+    name: mongo-pvc
+    namespace: apexbank
+spec:
+    storageClassName: standard
+    accessModes:
+        - ReadWriteOnce
+    resources:
+        requests:
+            storage: 5Gi
+  
+---  
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+    name: ollama-pvc
+    namespace: apexbank
+spec:
+    storageClassName: standard
+    accessModes:
+        - ReadWriteOnce
+    resources:
+        requests:
+            storage: 5Gi

@@ -1,0 +1,25 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+    name: backend-deployment
+    namespace: apexbank
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: backend
+    template:
+        metadata:
+            labels:
+                app: backend
+        spec:
+            containers:
+            - name: backend
+              image: buildwithsumeet/apex-bank-backend:latest
+              ports:
+              - containerPort: 5000
+              envFrom:
+              - secretRef:
+                  name: bankapi-secret
+              - configMapRef:
+                  name: mongo-config

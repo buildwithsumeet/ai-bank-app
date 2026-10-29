@@ -1,0 +1,28 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+    name: ollama-deployment
+    namespace: apexbank
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: ollama
+    template:
+        metadata:
+            labels:
+                app: ollama
+        spec:
+            containers:
+            - name: ollama
+              image: ollama/ollama:latest
+              ports:
+              - containerPort: 11434
+              volumeMounts:
+              - mountPath: /root/.ollama
+                name: ollama-storage
+            volumes:
+            - name: ollama-storage
+              persistentVolumeClaim:
+                  claimName: ollama-pvc
+

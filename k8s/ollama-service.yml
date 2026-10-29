@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+    name: ollama
+    namespace: apexbank
+spec:
+    selector:
+        app: ollama
+    ports:
+    - port: 11434
+      targetPort: 11434
+    type: ClusterIP

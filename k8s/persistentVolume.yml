@@ -1,0 +1,29 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+    name: mongo-pv
+    
+spec:
+    storageClassName: standard
+    capacity:
+        storage: 5Gi
+    accessModes:
+        - ReadWriteOnce
+    hostPath:
+        path: /data/mongo
+  
+---  
+
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+    name: ollama-pv
+    
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi   # Ollama AI models store karne ke liye thoda zyada space (10Gi) behtar rehta hai
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data/ollama

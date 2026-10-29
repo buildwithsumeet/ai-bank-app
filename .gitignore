@@ -27,3 +27,8 @@ logs/
 mongo_data/
 ollama_data/
 open_webui_data/
+
+# Test output & reports
+test-results/
+playwright-report/
+blob-report/
