@@ -1,6 +1,8 @@
 # 🏦 Apex Bank (`ai-bank-app`) — Full-Stack MERN Digital Banking & AI Assistant Platform
 
 [![Build Status](https://img.shields.io/badge/CI%2FCD-Passing-brightgreen?logo=github-actions)](.github/workflows/ci-cd.yml)
+[![Jenkins](https://img.shields.io/badge/Jenkins-Declarative_CI%2FCD-D33833?logo=jenkins&logoColor=white)](Jenkinsfile)
+[![Trivy](https://img.shields.io/badge/Trivy-Security_Vulnerability_Scan-1904DA?logo=aqua)](Jenkinsfile)
 [![Node.js](https://img.shields.io/badge/Node.js-v20-339933?logo=node.js)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-v18-61DAFB?logo=react)](https://react.dev/)
 [![Redux Toolkit](https://img.shields.io/badge/Redux_Toolkit-RTK-764ABC?logo=redux)](https://redux-toolkit.js.org/)
@@ -12,13 +14,13 @@
 [![Ollama](https://img.shields.io/badge/Ollama-Local_AI-FF6B6B?logo=ollama)](https://ollama.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A production-grade, cloud-native Digital Banking Platform built with the **MERN** stack (MongoDB, Express.js, React 18, Node.js) featuring **Redux Toolkit (RTK)** state management, **Redis 7.0 In-Memory Caching** with automatic cache invalidation and token blacklisting, multi-stage **MongoDB Aggregation Pipelines** (`$facet`, `$group`, `$lookup`), an enterprise **Dual-Token Authentication (15-min Access + 7-day Refresh Token)** architecture with silent rotation, an on-premise **Ollama AI Banking Assistant** (< 155 MB footprint), real-time database auto-seeding with visual progress tracking, atomic balance concurrency, interactive 16-digit virtual debit cards, and an enterprise **Kubernetes (K8s) & DevOps / SRE** architecture.
+A production-grade, cloud-native Digital Banking Platform built with the **MERN** stack (MongoDB, Express.js, React 18, Node.js) featuring **Redux Toolkit (RTK)** state management, **Redis 7.0 In-Memory Caching** with automatic cache invalidation and token blacklisting, multi-stage **MongoDB Aggregation Pipelines** (`$facet`, `$group`, `$lookup`), an enterprise **Dual-Token Authentication (15-min Access + 7-day Refresh Token)** architecture with silent rotation, an automated **Jenkins Declarative CI/CD Pipeline** with **Trivy Vulnerability Scanning** & Docker Hub automated image publishing, an on-premise **Ollama AI Banking Assistant** (< 155 MB footprint), real-time database auto-seeding with visual progress tracking, atomic balance concurrency, interactive 16-digit virtual debit cards, and an enterprise **Kubernetes (K8s 4-Node Cluster) & DevOps / SRE** architecture.
 
 ---
 
 ## 📑 Table of Contents
-1. [System Architecture](#-system-architecture)
-2. [Key Application Features](#-key-application-features)
+1. [🏛️ Enterprise Application & Infrastructure Architecture](#️-system-architecture)
+2. [✨ Key Application Features](#-key-application-features)
 3. [🤖 Ollama AI Banking Chatbot (< 155 MB)](#-ollama-ai-banking-chatbot--155-mb)
 4. [🌱 Database Seeding & Live Progress](#-database-seeding--live-progress)
 5. [🔑 Environment Variables (.env) Full Specification](#-environment-variables-env-full-specification)
@@ -28,14 +30,15 @@ A production-grade, cloud-native Digital Banking Platform built with the **MERN*
 9. [📊 MongoDB Aggregation Pipelines (Financial Analytics)](#-mongodb-aggregation-pipelines-financial-analytics)
 10. [🔐 Dual-Token Authentication (Access + Refresh Token)](#-dual-token-authentication-access--refresh-token)
 11. [⚛️ Redux Toolkit (RTK) Centralized Frontend Store](#-redux-toolkit-rtk-centralized-frontend-store)
-12. [💻 Manual Local Development (Without Docker)](#-manual-local-development-without-docker)
-13. [🧪 Pre-Seeded Test Credentials](#-pre-seeded-test-credentials)
-14. [📖 Complete REST API Specification](#-complete-rest-api-specification)
-15. [🛠️ DevOps & SRE Master Guide](#️-devops--sre-master-guide-what-devops-engineers-need)
+12. [🏗️ Jenkins Declarative CI/CD Pipeline (Trivy + Docker Hub)](#️-jenkins-declarative-cicd-pipeline-trivy--docker-hub)
+13. [💻 Manual Local Development (Without Docker)](#-manual-local-development-without-docker)
+14. [🧪 Pre-Seeded Test Credentials](#-pre-seeded-test-credentials)
+15. [📖 Complete REST API Specification](#-complete-rest-api-specification)
+16. [🛠️ DevOps & SRE Master Guide](#️-devops--sre-master-guide-what-devops-engineers-need)
     - [Container Topology & Microservices](#1-container-topology--microservices)
     - [macOS Port 5000 Collision Resolution](#2-macos-port-5000-collision-resolution)
     - [Health Checks & Liveness Probes](#3-health-checks--liveness-probes)
-    - [CI/CD Pipeline (GitHub Actions)](#4-cicd-pipeline-github-actions)
+    - [CI/CD Pipeline (GitHub Actions & Jenkins)](#4-cicd-pipeline-github-actions)
     - [Production Deployment Strategies (Docker Compose & Kubernetes)](#5-production-deployment-strategies)
     - [Database Backup & Disaster Recovery](#6-database-backup--disaster-recovery)
     - [Monitoring, Logging & Observability](#7-monitoring-logging--observability)
@@ -44,21 +47,105 @@ A production-grade, cloud-native Digital Banking Platform built with the **MERN*
 
 ---
 
-## 🏛️ System Architecture
+## 🏛️ Enterprise Application & Infrastructure Architecture
+
+Apex Bank is engineered as a zero-trust, cloud-native microservices platform combining client-side reactive state, high-performance in-memory caching, atomic ledger databases, local offline AI, and automated DevSecOps pipelines:
 
 ```mermaid
-graph TD
-    User["End User / Browser"] -->|Port 3000| Nginx["Frontend Nginx Web Server (React 18 SPA)"]
-    Nginx -->|/api/* Reverse Proxy| Backend["Express.js API Engine (Port 5000)"]
-    Nginx -->|/* Static Assets| ClientApp["Vite Optimized SPA + AI Chatbot Widget"]
-    
-    Backend -->|Mongoose ODM / TCP 27017| Mongo[("MongoDB 7.0 Cluster ('bankdb')")]
-    Backend -->|REST API / TCP 11434| Ollama[("Ollama Container (alpine/ollama ~70MB)")]
-    OllamaPuller["Ollama Puller (curl)"] -->|One-time boot pull| Ollama
-    
-    AdminUser["DevOps / DB Admin"] -->|Port 8081| MongoExpress["Mongo-Express GUI Visualizer"]
-    MongoExpress --> Mongo
+graph TB
+    subgraph Clients["🌐 Client & Edge Access Layer"]
+        UserBrowser["👤 User Browser / Mobile Client\n(HTTPS / Port 3000 / NodePort 30000)"]
+        DevOpsUser["👨‍💻 DevOps / Database Admin\n(HTTP / Port 8081)"]
+    end
+
+    subgraph WebTier["🎨 Frontend Web Tier (Container: apex-bank-frontend)"]
+        Nginx["Nginx Web Server\n(Port 80 / Reverse Proxy)"]
+        subgraph ReactApp["React 18 Single Page Application"]
+            SPA["React UI Components & Dashboards"]
+            RTK["⚛️ Redux Toolkit Central Store\n(authSlice, accountSlice, transactionSlice, uiSlice)"]
+            Interceptor["🔄 Silent 401 Token Refresh Interceptor"]
+        end
+    end
+
+    subgraph APITier["⚡ API & Middleware Tier (Container: apex-bank-backend)"]
+        Express["Express.js REST API Engine\n(Port 5000 / Host Port 5001 / NodePort 32000)"]
+        Security["🛡️ Security Middleware\n(Helmet, CORS, Rate-Limiting: 200 req/15m)"]
+        AuthGuard["🔐 Dual-Token Auth Guard\n(15-min Access Token + Redis Blacklist Check)"]
+        CacheHook["🔄 Cache Invalidation Engine\n(Purges on Deposit / Withdraw / Transfer)"]
+    end
+
+    subgraph CacheTier["⚡ In-Memory Caching & Session Tier (Container: apex-bank-redis)"]
+        Redis[("Redis 7.0 In-Memory Engine\n(Port 6379 / Cache-Aside)")]
+        RedisKeys["• user:profile:* (TTL: 10m)\n• user:accounts:* (TTL: 10m)\n• analytics:* (TTL: 15m)\n• admin:metrics (TTL: 5m)\n• blacklist:token:* (15m)\n• refresh:token:* (7d)"]
+    end
+
+    subgraph DBTier["💾 Primary Database Tier (Container: apex-bank-mongodb)"]
+        MongoDB[("MongoDB 7.0 Enterprise Cluster\n(Port 27017 / Database: 'bankdb')")]
+        AggPipeline["📊 Multi-Stage Aggregation Pipelines\n• $facet Financial Analytics\n• $lookup User-Account Relational Joins\n• Atomic ACID Concurrency ($inc, $gte)"]
+        MongoVol[("Persistent Volume: mongo_data\n(HostPath /data/mongo - 5Gi)")]
+    end
+
+    subgraph AITier["🤖 Local AI Assistant Tier (Container: apex-bank-ollama)"]
+        Ollama[("Ollama Local LLM Container\n(Port 11434 / Alpine ~70MB)")]
+        ModelCache["🧠 smollm:135m Model Cache (~85MB)\n(Persistent Volume: ollama_data)"]
+        AutoPuller["Ollama Puller (One-time cURL initialization)"]
+    end
+
+    subgraph AdminTier["🛠️ Database Visualizer Tier (Container: apex-bank-mongo-express)"]
+        MongoExpress["Mongo-Express Interactive GUI\n(Port 8081)"]
+    end
+
+    subgraph CICDTier["🏗️ DevSecOps & Orchestration Tier"]
+        Jenkins["🏗️ Jenkins Declarative Pipeline\n(Clean Slate ➔ Unit Tests ➔ Docker Build ➔ Trivy Scan ➔ Docker Hub)"]
+        K8s["☸️ Kubernetes 4-Node Kind Cluster\n(1 Control-Plane + 3 Worker Nodes / apexbank Namespace)"]
+    end
+
+    %% Network flows
+    UserBrowser -->|HTTP Port 3000| Nginx
+    Nginx -->|Static Assets| SPA
+    SPA <--> RTK
+    RTK <--> Interceptor
+    Nginx -->|/api/* Reverse Proxy| Express
+    Express --> Security
+    Security --> AuthGuard
+
+    AuthGuard <-->|Sub-millisecond Token Blacklist & Active Refresh Check| Redis
+    Express <-->|Sub-millisecond Cache-Aside Reads & Mutation Invalidations| Redis
+    Redis --- RedisKeys
+
+    Express -->|Aggregations & Atomic Transactions / Port 27017| MongoDB
+    MongoDB --- AggPipeline
+    MongoDB --- MongoVol
+
+    Express -->|Financial Prompts REST / Port 11434| Ollama
+    Ollama --- ModelCache
+    AutoPuller -->|One-time boot pull| Ollama
+
+    DevOpsUser -->|Port 8081| MongoExpress
+    MongoExpress -->|Admin TCP 27017| MongoDB
+
+    Jenkins -.->|Automated Builds & Scans| WebTier
+    Jenkins -.->|Automated Builds & Scans| APITier
+    K8s -.->|Orchestrates Pods & PVCs| WebTier
+    K8s -.->|Orchestrates Pods & PVCs| APITier
+    K8s -.->|Orchestrates Pods & PVCs| CacheTier
+    K8s -.->|Orchestrates Pods & PVCs| DBTier
+    K8s -.->|Orchestrates Pods & PVCs| AITier
 ```
+
+### 📋 Full Infrastructure Port & Protocol Matrix
+
+| Service Component | Container Name | Base Image | Internal Port | Host / NodePort | Protocol | Role & Storage Mount |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Frontend Web Client** | `apex-bank-frontend` | `nginx:alpine` | `80` | `3000` / `30000` | HTTP | Nginx reverse proxy + React 18 SPA + Redux store |
+| **Backend API Engine** | `apex-bank-backend` | `node:20-alpine` | `5000` | `5001` / `32000` | HTTP | Express.js REST API, Dual-Token JWT, Aggregations |
+| **Redis Cache & Session** | `apex-bank-redis` | `redis:7-alpine` | `6379` | `6379` | TCP / Redis | Sub-ms cache-aside, token blacklist, `redis_data` volume |
+| **MongoDB Database** | `apex-bank-mongodb` | `mongo:7.0` | `27017` | `27017` | TCP / Mongo | Persistent ACID banking ledger, `mongo_data` volume |
+| **Ollama AI Engine** | `apex-bank-ollama` | `alpine/ollama` | `11434` | `11434` | HTTP / REST | Local offline banking LLM (`smollm:135m`), `ollama_data` volume |
+| **Ollama Auto-Puller** | `apex-bank-ollama-puller` | `curlimages/curl`| N/A | N/A | CLI / Script | Auto-downloads lightweight model into Ollama on startup |
+| **Mongo-Express GUI** | `apex-bank-mongo-express`| `mongo-express` | `8081` | `8081` | HTTP | Interactive Web GUI database inspection visualizer |
+| **Jenkins CI/CD** | Host / Container | `jenkins/jenkins` | `8080` | `8080` | HTTP | Automated Clean Slate, Unit Tests, Trivy Scan, Docker Hub push |
+| **Kind K8s Cluster** | `apex-cluster` | `kindest/node` | Dynamic | `30000`/`32000` | TCP / Kubelet | 4-node cluster (1 control-plane + 3 workers, `apexbank` namespace) |
 
 ---
 
@@ -725,6 +812,202 @@ In [`frontend/src/api/client.js`](frontend/src/api/client.js), the `fetchWithAut
 
 ---
 
+## 🏗️ Jenkins Declarative CI/CD Pipeline (Trivy + Docker Hub)
+
+Apex Bank includes a battle-tested, production-ready Jenkins Declarative Pipeline defined in [`Jenkinsfile`](file:///Users/sumeetsingh/Desktop/practice/project1/Jenkinsfile). It automates the complete lifecycle: workspace hygiene, multi-tier unit testing, multi-container Docker image compilation, **Aqua Security Trivy** vulnerability scanning, and authenticated Docker Hub image publishing.
+
+```
+       +-----------------------------------------------------------------------------------------+
+       |                         🏗️ JENKINS DECLARATIVE PIPELINE LIFECYCLE                        |
+       |                                                                                         |
+       |  [Clean Slate] ---> [Git Checkout] ---> [Unit Testing] ---> [Docker Build]              |
+       |    deleteDir()        origin/main       frontend+backend    backend + frontend          |
+       |                                                                   |                     |
+       |                                                                   v                     |
+       |  [Post Actions] <--- [Docker Hub Push] <------------------- [Trivy Scan]                |
+       |   Status alert       Authenticated publish                   CVE Vulnerability Check    |
+       +-----------------------------------------------------------------------------------------+
+```
+
+### 🌊 Jenkins Pipeline Stage Flowchart
+
+```mermaid
+graph LR
+    A["1. Clean Slate\n(deleteDir)"] --> B["2. Git Pull\n(main branch)"]
+    B --> C["3. Unit Testing\n(npm lint + npm test\nfrontend & backend)"]
+    C --> D["4. Docker Build\n(apex-bank-backend:latest\napex-bank-frontend:latest)"]
+    D --> E["5. Trivy Security Scan\n(Vulnerability CVE analysis)"]
+    E --> F["6. Docker Hub Push\n(withCredentials: dockerhub-creds\nTag & Push to Registry)"]
+    F --> G["7. Post Actions\n(Success / Failure / Always)"]
+```
+
+---
+
+### 📦 Stage-by-Stage Implementation Breakdown
+
+| Stage | Name in Jenkinsfile | Commands / Action | Validation Gate / Purpose |
+| :--- | :--- | :--- | :--- |
+| **Stage 1** | `Clean Slate` | `deleteDir()` | Purges stale cache, node_modules, and previous build residue to ensure deterministic builds. |
+| **Stage 2** | `Git Pull` | `git branch: 'main', url: 'https://github.com/buildwithsumeet/ai-bank-app.git'` | Checks out the latest commit on the production branch. |
+| **Stage 3** | `Unit Testing` | `dir('frontend') { npm install && npm run lint && npm test }`<br>`dir('backend') { npm install && npm run lint && npm test }` | **Quality Gate**: Runs syntax linting and unit tests on both tiers. Fails pipeline immediately if any test fails. |
+| **Stage 4** | `Docker Image Building` | `docker build -t apex-bank-backend:latest .`<br>`docker build -t apex-bank-frontend:latest .` | Multi-stage Docker builds compiling production React SPA (Nginx) and Node.js 20 backend engine. |
+| **Stage 5** | `Docker Image Testing Trivy` | `trivy image apex-bank-backend:latest`<br>`trivy image apex-bank-frontend:latest` | **Security Gate**: Analyzes OS packages, npm dependencies, and binaries for known CVE vulnerabilities. |
+| **Stage 6** | `Docker Image Pushing` | `withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', ...)])`<br>`docker login`<br>`docker push "$DOCKER_USERNAME/apex-bank-backend:latest"`<br>`docker push "$DOCKER_USERNAME/apex-bank-frontend:latest"`<br>`docker logout` | Securely authenticates with Docker Hub credentials, tags release images, pushes to public/private registry, and logs out. |
+| **Post** | `post { success / failure / always }` | `echo 'Pipeline completed successfully!'` | Logs audit records and notifies DevOps teams of build status. |
+
+---
+
+### 📜 Complete Jenkins Declarative Pipeline Script (`Jenkinsfile`)
+
+```groovy
+pipeline {
+    agent any
+
+    environment {
+        PATH = "/opt/homebrew/bin:/usr/local/bin:${env.PATH}"
+    }
+
+    stages {
+        stage('Clean Slate') {
+            steps {
+                echo 'Resetting workspace...'
+                deleteDir()
+            }
+        }
+
+        stage('Git Pull') {
+            steps {
+                echo 'Starting Git checkout...'
+                git branch: 'main',
+                    url: 'https://github.com/buildwithsumeet/ai-bank-app.git'
+                echo 'Git checkout successful!'
+            }
+        }
+
+        stage('Unit Testing') {
+            steps {
+                echo 'Running unit testing...'
+                dir('frontend') {
+                    sh 'npm install'
+                    sh 'npm run lint'
+                    sh 'npm test'
+                }
+                dir('backend') {
+                    sh 'npm install'
+                    sh 'npm run lint'
+                    sh 'npm test'
+                }
+                echo 'Unit testing passed!'
+            }
+        }
+
+        stage('Docker Image Building') {
+            steps {
+                echo 'Building Docker images...'
+                dir('backend') {
+                    sh 'docker build -t apex-bank-backend:latest .'
+                }
+                dir('frontend') {
+                    sh 'docker build -t apex-bank-frontend:latest .'
+                }
+                echo 'Docker images built successfully!'
+            }
+        }
+
+        stage("Docker Image Testing Trivy") {
+            steps {
+                echo "Scanning Docker images with Trivy..."
+                sh 'trivy image apex-bank-backend:latest'
+                sh 'trivy image apex-bank-frontend:latest'
+            }
+        }
+
+        stage('Docker Image Pushing') {
+            steps {
+                echo 'Pushing Docker images to Docker Hub...'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            --username "$DOCKER_USERNAME" \
+                            --password-stdin
+                    '''
+
+                    sh '''
+                        docker tag apex-bank-backend:latest \
+                            "$DOCKER_USERNAME/apex-bank-backend:latest"
+                        docker push \
+                            "$DOCKER_USERNAME/apex-bank-backend:latest"
+                    '''
+
+                    sh '''
+                        docker tag apex-bank-frontend:latest \
+                            "$DOCKER_USERNAME/apex-bank-frontend:latest"
+                        docker push \
+                            "$DOCKER_USERNAME/apex-bank-frontend:latest"
+                    '''
+
+                    sh 'docker logout'
+                    echo 'Docker images pushed successfully!'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check Console Output.'
+        }
+        always {
+            echo 'Pipeline execution finished.'
+        }
+    }
+}
+```
+
+---
+
+### ⚙️ Jenkins Server Configuration Guide
+
+#### 1. Required Jenkins Plugins
+Install the following plugins via **Manage Jenkins** ➡️ **Plugins** ➡️ **Available Plugins**:
+- `Pipeline` (Workflow Aggregator)
+- `Git Plugin`
+- `Credentials Binding Plugin`
+- `Docker Pipeline`
+
+#### 2. Configure Docker Hub Credentials
+1. Navigate to **Manage Jenkins** ➡️ **Credentials** ➡️ **System** ➡️ **Global credentials**.
+2. Click **Add Credentials**:
+   - **Kind**: `Username with password`
+   - **Scope**: `Global`
+   - **Username**: Your Docker Hub username (e.g. `buildwithsumeet`)
+   - **Password**: Your Docker Hub Personal Access Token (PAT)
+   - **ID**: `dockerhub-creds` *(must match credentialsId in Jenkinsfile)*
+3. Click **Create**.
+
+#### 3. Create Pipeline Job
+1. In Jenkins dashboard, click **New Item** ➡️ Select **Pipeline** ➡️ Name it `apex-bank-pipeline`.
+2. Scroll to the **Pipeline** section:
+   - **Definition**: `Pipeline script from SCM`
+   - **SCM**: `Git`
+   - **Repository URL**: `https://github.com/buildwithsumeet/ai-bank-app.git`
+   - **Branch Specifier**: `*/main`
+   - **Script Path**: `Jenkinsfile`
+3. Under **Build Triggers**, select **GitHub hook trigger for GITScm polling** for automated builds on push.
+4. Click **Save** and trigger **Build Now**!
+
+---
+
 ## 💻 Manual Local Development (Without Docker)
 
 If you prefer running services directly on your host machine:
@@ -936,59 +1219,9 @@ jobs:
       - run: docker compose build --parallel
 ```
 
-#### Jenkins Declarative Pipeline (`Jenkinsfile`):
-A ready-to-run Declarative Pipeline script is provided in [`Jenkinsfile`](./Jenkinsfile) for Jenkins CI/CD servers:
+#### Jenkins Declarative Pipeline with Trivy & Docker Hub:
+A complete production pipeline with workspace hygiene, multi-tier testing, **Trivy Vulnerability Scanning**, and authenticated Docker Hub publishing is configured in [`Jenkinsfile`](./Jenkinsfile). For full stage breakdown, diagram, and Jenkins server setup, see [Section 12: Jenkins Declarative CI/CD Pipeline](#️-jenkins-declarative-cicd-pipeline-trivy--docker-hub).
 
-```groovy
-pipeline {
-    agent any
-
-    stages {
-        stage('Git Pull') {
-            steps {
-                git branch: 'main', url: 'https://github.com/buildwithsumeet/ai-bank-app.git'
-            }
-        }
-        stage('Backend - Install & Lint') {
-            steps {
-                dir('backend') {
-                    sh 'npm ci || npm install'
-                    sh 'npm run lint'
-                }
-            }
-        }
-        stage('Backend - Test') {
-            steps {
-                dir('backend') {
-                    sh 'npm test'
-                }
-            }
-        }
-        stage('Frontend - Install & Lint') {
-            steps {
-                dir('frontend') {
-                    sh 'npm ci || npm install'
-                    sh 'npm run lint'
-                }
-            }
-        }
-        stage('Frontend - Test & Build') {
-            steps {
-                dir('frontend') {
-                    sh 'npm test'
-                    sh 'npm run build'
-                }
-            }
-        }
-        stage('Docker - Build & Validate') {
-            steps {
-                sh 'docker compose config'
-                sh 'docker compose build'
-            }
-        }
-    }
-}
-```
 
 #### Running Lint & Unit Tests Locally:
 ```bash
