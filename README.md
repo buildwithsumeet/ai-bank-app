@@ -5,10 +5,12 @@
 [![React](https://img.shields.io/badge/React-v18-61DAFB?logo=react)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-v7.0-47A248?logo=mongodb)](https://www.mongodb.com/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-K8s_v1.30+-326CE5?logo=kubernetes&logoColor=white)](k8s/)
+[![Kind](https://img.shields.io/badge/Kind-Multi--Node_Cluster-326CE5?logo=kubernetes&logoColor=white)](k8s/kind-config.yml)
 [![Ollama](https://img.shields.io/badge/Ollama-Local_AI-FF6B6B?logo=ollama)](https://ollama.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A production-grade, containerized Digital Banking Platform built with the **MERN** stack (MongoDB, Express.js, React 18, Node.js) featuring an on-premise **Ollama AI Banking Assistant** (< 155 MB footprint), real-time database auto-seeding with visual progress tracking, atomic balance concurrency, interactive 16-digit virtual debit cards, and an enterprise **DevOps / SRE** architecture.
+A production-grade, cloud-native Digital Banking Platform built with the **MERN** stack (MongoDB, Express.js, React 18, Node.js) featuring an on-premise **Ollama AI Banking Assistant** (< 155 MB footprint), real-time database auto-seeding with visual progress tracking, atomic balance concurrency, interactive 16-digit virtual debit cards, and an enterprise **Kubernetes (K8s) & DevOps / SRE** architecture.
 
 ---
 
@@ -19,10 +21,11 @@ A production-grade, containerized Digital Banking Platform built with the **MERN
 4. [🌱 Database Seeding & Live Progress](#-database-seeding--live-progress)
 5. [🔑 Environment Variables (.env) Full Specification](#-environment-variables-env-full-specification)
 6. [🚀 Quickstart & Docker Orchestration](#-quickstart--docker-orchestration)
-7. [💻 Manual Local Development (Without Docker)](#-manual-local-development-without-docker)
-8. [🧪 Pre-Seeded Test Credentials](#-pre-seeded-test-credentials)
-9. [📖 Complete REST API Specification](#-complete-rest-api-specification)
-10. [🛠️ DevOps & SRE Master Guide](#️-devops--sre-master-guide-what-devops-engineers-need)
+7. [☸️ Cloud-Native Kubernetes (K8s) Orchestration](#️-cloud-native-kubernetes-k8s-orchestration)
+8. [💻 Manual Local Development (Without Docker)](#-manual-local-development-without-docker)
+9. [🧪 Pre-Seeded Test Credentials](#-pre-seeded-test-credentials)
+10. [📖 Complete REST API Specification](#-complete-rest-api-specification)
+11. [🛠️ DevOps & SRE Master Guide](#️-devops--sre-master-guide-what-devops-engineers-need)
     - [Container Topology & Microservices](#1-container-topology--microservices)
     - [macOS Port 5000 Collision Resolution](#2-macos-port-5000-collision-resolution)
     - [Health Checks & Liveness Probes](#3-health-checks--liveness-probes)
@@ -285,6 +288,228 @@ docker compose down
 # Stop and purge persistent data volumes
 docker compose down -v
 ```
+
+---
+
+## ☸️ Cloud-Native Kubernetes (K8s) Orchestration
+
+The entire Apex Bank platform is architected for enterprise cloud-native orchestration with **Kubernetes (K8s v1.30+)**. It includes a full 13-manifest GitOps specification supporting high-availability, declarative state, persistent volumes for MongoDB and Ollama AI, unified secrets/config management, and zero-downtime rolling updates.
+
+```
+       +--------------------------------------------------------------------------+
+       |              ☸️ Kind Multi-Node Cluster: apex-cluster (v1.30+)           |
+       |  +------------------+  +------------------+  +------------------------+  |
+       |  |  control-plane   |  |     worker 1     |  |   worker 2 & worker 3  |  |
+       |  +------------------+  +------------------+  +------------------------+  |
+       |                              Namespace: `apexbank`                       |
+       +--------------------------------------------------------------------------+
+```
+
+### 🏛️ Kubernetes Cluster Architecture
+
+```mermaid
+graph TB
+    subgraph Client["External Traffic / Browser"]
+        User["User Browser"]
+    end
+
+    subgraph Cluster["☸️ Kubernetes Cluster (Namespace: apexbank)"]
+        subgraph Ingress["Services & Ingress Layer"]
+            FESvc["frontend-service\nNodePort: 30000\nPort: 80"]
+            BESvc["backend\nNodePort: 32000\nPort: 5000"]
+            MongoSvc["mongo\nClusterIP\nPort: 27017"]
+            OllamaSvc["ollama\nClusterIP\nPort: 11434"]
+        end
+
+        subgraph Workloads["Workload Deployments"]
+            FEPod["frontend-deployment\n(Nginx + React 18 SPA)"]
+            BEPod["backend-deployment\n(Express.js API Engine)"]
+            MongoPod["mongo-deployment\n(MongoDB 7.0 Engine)"]
+            OllamaPod["ollama-deployment\n(Ollama AI Assistant)"]
+        end
+
+        subgraph Config["Configuration & Security"]
+            CM["ConfigMap\nmongo-config"]
+            SEC["Secret\nbankapi-secret"]
+        end
+
+        subgraph Storage["Persistent Storage"]
+            MongoPVC["PVC: mongo-pvc\n(5Gi Standard)"]
+            OllamaPVC["PVC: ollama-pvc\n(5Gi Standard)"]
+            MongoPV["PV: mongo-pv\n(/data/mongo)"]
+            OllamaPV["PV: ollama-pv\n(/data/ollama)"]
+        end
+    end
+
+    User -->|Port 30000 / localhost| FESvc
+    User -->|Port 32000 / API Direct| BESvc
+    FESvc --> FEPod
+    FEPod -->|Reverse Proxy /api/*| BESvc
+    BESvc --> BEPod
+    BEPod -->|TCP 27017| MongoSvc
+    BEPod -->|HTTP 11434| OllamaSvc
+    MongoSvc --> MongoPod
+    OllamaSvc --> OllamaPod
+
+    CM -.->|envFrom| BEPod
+    CM -.->|envFrom| FEPod
+    SEC -.->|envFrom| BEPod
+    SEC -.->|envFrom| MongoPod
+
+    MongoPod --- MongoPVC
+    MongoPVC --- MongoPV
+    OllamaPod --- OllamaPVC
+    OllamaPVC --- OllamaPV
+```
+
+---
+
+### 📦 Kubernetes Manifest Inventory (`k8s/`)
+
+The repository includes 13 production-ready Kubernetes manifests located under the [`k8s/`](k8s/) directory:
+
+| Manifest | Kind | API Version | Namespace | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| [`k8s/kind-config.yml`](k8s/kind-config.yml) | `Cluster` | `kind.x-k8s.io/v1alpha4` | N/A | Multi-node cluster definition (1 control-plane + 3 workers) |
+| [`k8s/persistentVolume.yml`](k8s/persistentVolume.yml) | `PersistentVolume` | `v1` | Cluster | 5Gi HostPath volumes for MongoDB (`/data/mongo`) & Ollama (`/data/ollama`) |
+| [`k8s/persistentVolumeClaim.yml`](k8s/persistentVolumeClaim.yml) | `PersistentVolumeClaim` | `v1` | `apexbank` | PVC storage claims binding workloads to persistent volumes |
+| [`k8s/configMap.yml`](k8s/configMap.yml) | `ConfigMap` | `v1` | `apexbank` | Shared environment config, ports, hostnames, and Mongo connection strings |
+| [`k8s/secret.yaml`](k8s/secret.yaml) | `Secret` | `v1` | `apexbank` | Base64 encoded secrets (JWT secret, Mongo root admin credentials) |
+| [`k8s/mongo-deployment.yml`](k8s/mongo-deployment.yml) | `Deployment` | `apps/v1` | `apexbank` | MongoDB database engine with mounted volume and credentials |
+| [`k8s/mongo-service.yml`](k8s/mongo-service.yml) | `Service` | `v1` | `apexbank` | Internal ClusterIP DNS endpoint `mongo:27017` |
+| [`k8s/ollama-deployment.yml`](k8s/ollama-deployment.yml) | `Deployment` | `apps/v1` | `apexbank` | Ollama AI container with mounted model cache volume |
+| [`k8s/ollama-service.yml`](k8s/ollama-service.yml) | `Service` | `v1` | `apexbank` | Internal ClusterIP DNS endpoint `ollama:11434` |
+| [`k8s/backend-deployment.yml`](k8s/backend-deployment.yml) | `Deployment` | `apps/v1` | `apexbank` | Express API pods using `buildwithsumeet/apex-bank-backend:latest` |
+| [`k8s/backend-service.yml`](k8s/backend-service.yml) | `Service` | `v1` | `apexbank` | NodePort service exposing backend API on port `32000` (`5000` target) |
+| [`k8s/frontend-deployment.yml`](k8s/frontend-deployment.yml) | `Deployment` | `apps/v1` | `apexbank` | React 18 SPA Nginx pods using `buildwithsumeet/apex-bank-frontend:latest` |
+| [`k8s/frontend-service.yml`](k8s/frontend-service.yml) | `Service` | `v1` | `apexbank` | NodePort service exposing Web UI on port `30000` (`80` target) |
+
+---
+
+### 🚀 Step-by-Step Kubernetes Deployment Runbook
+
+#### 1. Spin Up Multi-Node Cluster with Kind
+Create a 4-node cluster using [`k8s/kind-config.yml`](k8s/kind-config.yml):
+```bash
+# Create Kind 4-node cluster
+kind create cluster --config k8s/kind-config.yml --name apex-cluster
+
+# Verify all 4 nodes are Ready
+kubectl get nodes
+# NAME                         STATUS   ROLES           AGE   VERSION
+# apex-cluster-control-plane   Ready    control-plane   1m    v1.30.0
+# apex-cluster-worker          Ready    <none>          1m    v1.30.0
+# apex-cluster-worker2         Ready    <none>          1m    v1.30.0
+# apex-cluster-worker3         Ready    <none>          1m    v1.30.0
+```
+
+#### 2. Create Isolated Namespace
+```bash
+kubectl create namespace apexbank
+```
+
+#### 3. Load Docker Images into Kind (Local Development)
+```bash
+# Build images if not already built
+docker build -t buildwithsumeet/apex-bank-backend:latest ./backend
+docker build -t buildwithsumeet/apex-bank-frontend:latest ./frontend
+
+# Load images into Kind nodes
+kind load docker-image buildwithsumeet/apex-bank-backend:latest --name apex-cluster
+kind load docker-image buildwithsumeet/apex-bank-frontend:latest --name apex-cluster
+```
+
+#### 4. Apply Kubernetes Manifests in Order
+Deploy storage, configuration, secrets, and microservices in sequence:
+```bash
+# Step A: Apply Storage (PV & PVC)
+kubectl apply -f k8s/persistentVolume.yml
+kubectl apply -f k8s/persistentVolumeClaim.yml
+
+# Step B: Apply ConfigMap & Secrets
+kubectl apply -f k8s/configMap.yml
+kubectl apply -f k8s/secret.yaml
+
+# Step C: Deploy Database & AI Microservices
+kubectl apply -f k8s/mongo-service.yml
+kubectl apply -f k8s/mongo-deployment.yml
+kubectl apply -f k8s/ollama-service.yml
+kubectl apply -f k8s/ollama-deployment.yml
+
+# Step D: Deploy Application Backend & Frontend
+kubectl apply -f k8s/backend-service.yml
+kubectl apply -f k8s/backend-deployment.yml
+kubectl apply -f k8s/frontend-service.yml
+kubectl apply -f k8s/frontend-deployment.yml
+```
+
+#### 5. Verify Pods & Services Status
+```bash
+kubectl get pods -n apexbank -o wide
+```
+**Expected Output:**
+```
+NAME                                   READY   STATUS    RESTARTS   AGE
+backend-deployment-7dc674df9d-x4wlr    1/1     Running   0          5m
+frontend-deployment-567db9c8f4-gvkpw   1/1     Running   0          5m
+mongo-deployment-5cf4847f54-9nhhv      1/1     Running   0          5m
+ollama-deployment-668fdf544d-bgnrh     1/1     Running   0          5m
+```
+
+```bash
+kubectl get svc -n apexbank
+```
+**Expected Output:**
+```
+NAME               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+backend            NodePort    10.96.140.82    <none>        5000:32000/TCP   5m
+frontend-service   NodePort    10.96.220.15    <none>        80:30000/TCP     5m
+mongo              ClusterIP   10.96.91.231    <none>        27017/TCP        5m
+ollama             ClusterIP   10.96.185.12    <none>        11434/TCP        5m
+```
+
+---
+
+### 🌐 Accessing the Application in Kubernetes
+
+Depending on your cluster network setup (Kind vs. Cloud K8s / MetalLB):
+
+#### Option A: Port-Forwarding (Recommended for Local Dev)
+Forward the services directly to your localhost:
+```bash
+# Forward Frontend Web UI to localhost:3000
+kubectl port-forward svc/frontend-service 3000:80 -n apexbank
+
+# Forward Backend API to localhost:5000 (or 5001 to avoid macOS collision)
+kubectl port-forward svc/backend 5001:5000 -n apexbank
+
+# Forward MongoDB to localhost:27017 (for Compass/mongosh)
+kubectl port-forward svc/mongo 27017:27017 -n apexbank
+
+# Forward Ollama AI to localhost:11434
+kubectl port-forward svc/ollama 11434:11434 -n apexbank
+```
+
+#### Option B: Direct NodePort Access
+If your Kind nodes expose port mappings to host or you are using Minikube / bare metal:
+- **Frontend Web UI**: `http://<node-ip>:30000`
+- **Backend API**: `http://<node-ip>:32000/api/health`
+
+---
+
+### 🛠️ Kubernetes SRE & Operations Cheat Sheet
+
+| Task | Command |
+| :--- | :--- |
+| **View Live Logs** | `kubectl logs -f deployment/backend-deployment -n apexbank` |
+| **Inspect Pod Details** | `kubectl describe pod -l app=backend -n apexbank` |
+| **Execute Shell in Pod** | `kubectl exec -it deployment/backend-deployment -n apexbank -- sh` |
+| **Seed Database in K8s** | `kubectl exec -it deployment/backend-deployment -n apexbank -- npm run seed` |
+| **Restart Workloads** | `kubectl rollout restart deployment/backend-deployment -n apexbank` |
+| **Check PVC Storage Binding** | `kubectl get pvc,pv -n apexbank` |
+| **Check Resource Usage** | `kubectl top pods -n apexbank` |
+| **Scale Workload** | `kubectl scale deployment/backend-deployment --replicas=3 -n apexbank` |
+| **Delete All K8s Resources** | `kubectl delete -f k8s/ -n apexbank` |
 
 ---
 
